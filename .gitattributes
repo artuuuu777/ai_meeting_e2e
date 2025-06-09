@@ -1,0 +1,33 @@
+* text=auto eol=lf
+*.{cmd,[cC][mM][dD]} text eol=crlf
+*.{bat,[bB][aA][tT]} text eol=crlf
+*.{ps1,psm1,psd1} text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.m4a binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+
+# Terraform
+*.tf text eol=lf
+*.tfvars text eol=lf
+*.tfstate binary
+
+# Lock files
+package-lock.json binary
+yarn.lock binary
+pnpm-lock.yaml binary
+poetry.lock binary
+Pipfile.lock binary

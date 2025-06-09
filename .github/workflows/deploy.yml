@@ -1,0 +1,93 @@
+name: Deploy Application
+
+on:
+  workflow_run:
+    workflows: ["Backend CI", "Frontend CI", "Infrastructure CI"]
+    types: [completed]
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    environment: production
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and push backend image
+      uses: docker/build-push-action@v5
+      with:
+        context: backend
+        push: true
+        tags: |
+          ${{ steps.login-ecr.outputs.registry }}/meeting-ai-backend:latest
+          ${{ steps.login-ecr.outputs.registry }}/meeting-ai-backend:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push frontend image
+      uses: docker/build-push-action@v5
+      with:
+        context: frontend
+        push: true
+        tags: |
+          ${{ steps.login-ecr.outputs.registry }}/meeting-ai-frontend:latest
+          ${{ steps.login-ecr.outputs.registry }}/meeting-ai-frontend:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Update ECS service
+      run: |
+        aws ecs update-service \
+          --cluster meeting-ai-prod-cluster \
+          --service meeting-ai-backend-service \
+          --force-new-deployment
+        
+        aws ecs update-service \
+          --cluster meeting-ai-prod-cluster \
+          --service meeting-ai-frontend-service \
+          --force-new-deployment
+
+    - name: Wait for deployment
+      run: |
+        aws ecs wait services-stable \
+          --cluster meeting-ai-prod-cluster \
+          --services meeting-ai-backend-service meeting-ai-frontend-service
+
+    - name: Notify deployment status
+      if: always()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const status = '${{ job.status }}' === 'success' ? '✅ Successful' : '❌ Failed';
+          const message = `## Deployment ${status}
+          
+          **Environment**: Production  
+          **Commit**: ${context.sha}  
+          **Workflow**: ${context.workflow}  
+          **Time**: ${new Date().toISOString()}`;
+          
+          github.rest.repos.createCommitComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            commit_sha: context.sha,
+            body: message
+          });
