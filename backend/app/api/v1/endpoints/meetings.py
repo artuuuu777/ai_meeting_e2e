@@ -221,8 +221,9 @@ async def upload_audio_direct(
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     
-    # Validate file
-    if file.size > settings.max_audio_file_size_bytes:
+    # Read file content and validate size
+    file_content = await file.read()
+    if len(file_content) > settings.max_audio_file_size_bytes:
         raise HTTPException(
             status_code=413,
             detail=f"File too large. Max size: {settings.MAX_AUDIO_FILE_SIZE_MB}MB",
@@ -240,7 +241,6 @@ async def upload_audio_direct(
     s3_service = S3Service()
     
     try:
-        file_content = await file.read()
         s3_service.upload_file(
             bucket=settings.S3_BUCKET_RAW_AUDIO,
             key=s3_key,
@@ -263,7 +263,7 @@ async def upload_audio_direct(
         "Audio file uploaded directly",
         meeting_id=str(meeting_id),
         s3_key=s3_key,
-        file_size=file.size,
+        file_size=len(file_content),
     )
     
     return {
